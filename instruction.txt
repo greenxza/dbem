@@ -1,0 +1,30 @@
+DBEM release instruction
+
+Access Beaglebone black
+$ ssh machinekit@192.168.7.2
+password: machinekit
+
+Main program
+1. Replace folder dbem to /home/machinekit/Desktop/workspace/dbem
+2. command line:
+$ sudo su
+$ cd /home/machinekit/Desktop/workspace/dbem
+$ make cleardatabase
+$ make rebuild
+
+
+UI program
+1. Replace folder build-dbemui-Desktop-Release to /home/machinekit/Desktop/workspace/build-dbemui-Desktop-Release
+2. command line:
+$ cd /home/machinekit/Desktop/workspace/build-dbemui-Desktop-Release
+$ chmod a+x dbem
+
+
+Change BBB IP for unique device.
+1.Edit setNetwork.sh
+2.Change line "sudo ifconfig eth0 192.168.2.20" to "sudo ifconfig eth0 {your ip}"
+
+Configuration file configVtoI.
+	Replace file configVtoI with configVtoI.DBEM<CurrentDBEM#> to set value associated with that machine
+	Example:
+		Replace configVtoI with configVtoI.DBEM1 when using DBEM1
