@@ -27,4 +27,10 @@ typedef struct {
     float soc3;
 } SOCsStruct;
 
+typedef struct {
+    BatteryConfigStruct *b1;
+    BatteryConfigStruct *b2;
+    BatteryConfigStruct *b3;
+} ConfigStruct;
+
 #endif

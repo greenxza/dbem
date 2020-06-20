@@ -836,7 +836,7 @@ void updatePredictBank(StatusStruct **status) {
  */
 int preCondition(float pv_power, float load_power) {
     if (pv_power <= 0 && load_power <= 0) {
-        printf("INFO: No PV and load power\n");
+        printf("INFO: No PV and load power.\n");
         resetChargerOnDayTime();
         return 1;
     }
@@ -858,8 +858,6 @@ int process_algorithm(StatusStruct **status) {
     float pv_power = (*status)->p_pv;
     float load_power = (*status)->p_load;
     bool compare_power = load_power > pv_power;
-    printf("INFO: SOC B1:%f | B2:%f | B3:%f |\n",
-        (*status)->b1->soc, (*status)->b2->soc, (*status)->b3->soc);
     if (preCondition(pv_power, load_power)) {
         updatePredictBank(status);
         pthread_mutex_unlock(&status_mutex);
@@ -965,20 +963,11 @@ int process_algorithm(StatusStruct **status) {
             case 3:
                 batt = (*status)->b3;
                 break;
-            case 4:
-                batt = (*status)->b1;
-                break;
-            case 5:
-                batt = (*status)->b2;
-                break;
-            case 6:
-                batt = (*status)->b3;
-                break;
             default:
                 break;
         }
         if(batt==NULL) {
-            printf("ERROR: Invalid battery bank#%d to charge\n", bank_to_chrg);
+            printf("ERROR: Invalid battery B%d to charge.\n", bank_to_chrg);
             open_all_input_switch();
             (*status)->b1->in_en = 0;
             (*status)->b2->in_en = 0;
@@ -990,15 +979,6 @@ int process_algorithm(StatusStruct **status) {
         }
         chrgBank(&batt);
         dischrgBank(&batt, 1); // Discharge force
-        if (bank_to_chrg <= 3) {
-            (*status)->b1->target_soc = (*status)->b2->target_soc = (*status)->b3->target_soc = MIN(batt->soc + (float)BATT_SOC_DELTA, 1.0);
-            printf("INFO: Update target SOC: %.10f\n", batt->target_soc);
-            (*status)->now_chg = batt->bank_id;
-            printf("INFO: Update new charging status to bank %d\n", batt->bank_id);
-            (*status)->now_dischg = 0;
-        } else {
-            printf("INFO: Remain state");
-        }
         sleep(1);
         open_other_input_switch(batt->bank_id, status);
         open_other_output_switch(batt->bank_id, status);
@@ -1032,7 +1012,7 @@ float calculateSOC(
     battery_config = malloc(sizeof(BatteryConfigStruct));
     retrieve_config(&battery_config, (*batt_addr)->bank_id);
     float Ibatt = i_in - i_out;
-    float Pbatt = Vbatt*Ibatt; //P = V ⋅ I
+    float Pbatt = Vbatt*Ibatt;
     float Vrate = battery_config->chg_v;
     float first = 1 - ((self_discharge*(float)DELTA_T) / (24*3600));
     float seconds1 = (float)BATT_EFFICIENCY * Pbatt * (float)DELTA_T / 3600;
