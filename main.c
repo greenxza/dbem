@@ -686,18 +686,6 @@ void *monitering_all(void *vargp){
         //   sleep(MONITORING_SLEEP);
         //   continue;
         // }
-        BatteryConfigStruct *battery_config1;
-        BatteryConfigStruct *battery_config2;
-        BatteryConfigStruct *battery_config3;
-
-        battery_config1 = malloc(sizeof(BatteryConfigStruct));
-        battery_config2 = malloc(sizeof(BatteryConfigStruct));
-        battery_config3 = malloc(sizeof(BatteryConfigStruct));
-
-        retrieve_config(&battery_config1, 1);
-        retrieve_config(&battery_config2, 2);
-        retrieve_config(&battery_config3, 3);
-        // printf("readChargerIDcVolt: %f\n", readChargerIDcVolt());
         printf("Monitoring: V1batt=%f | V2batt=%f | V3batt=%f | \n", status->b1->v, status->b2->v, status->b3->v);
         printf("Monitoring: V1=%f | V2=%f | V3=%f |\n", v1,v2,v3);
         printf("Monitoring: From sensor I_in1=%f | I_in2=%f | I_in3=%f \n", status->b1->i_in, status->b2->i_in, status->b3->i_in);
@@ -711,22 +699,6 @@ void *monitering_all(void *vargp){
         printf(
             "Monitoring: I_COMB=%f | I_COMB=%f | I_COMB=%f |\n",
             status->b1->comb_i_in,status->b2->comb_i_in,status->b3->comb_i_in);
-        printf(
-            "Monitoring: I_MIN_CHG=%f | I_MIN_CHG=%f | I_MIN_CHG=%f |\n",
-            battery_config1->chg_i_min, battery_config2->chg_i_min, battery_config3->chg_i_min);
-        printf(
-            "Monitoring: I_MAX_CHG=%f | I_MAX_CHG=%f | I_MAX_CHG=%f |\n",
-            battery_config1->chg_i_max, battery_config2->chg_i_max, battery_config3->chg_i_max);
-        printf(
-            "Monitoring: I_MIN_DCHG=%f | I_MIN_DCHG=%f | I_MIN_DCHG=%f |\n",
-            battery_config1->dischg_i_min, battery_config2->dischg_i_min, battery_config3->dischg_i_min);
-        printf(
-            "Monitoring: I_MAX_DCHG=%f | I_MAX_DCHG=%f | I_MAX_DCHG=%f |\n",
-            battery_config1->dischg_i_max, battery_config2->dischg_i_max, battery_config3->dischg_i_max);
-        free(battery_config1);
-        free(battery_config2);
-        free(battery_config3);
-
         int false_status = updateFaultStatus(&status);
         printf("Monitoring in_en: B1=%d B2=%d B3=%d\n", status->b1->in_en, status->b2->in_en, status->b3->in_en);
         printf("Monitoring out_en: B1=%d B2=%d B3=%d\n", status->b1->out_en, status->b2->out_en, status->b3->out_en);
@@ -857,14 +829,9 @@ int process_algorithm(StatusStruct **status) {
     updateAllSOC(status);
     float pv_power = (*status)->p_pv;
     float load_power = (*status)->p_load;
-    bool compare_power = load_power > pv_power;
-    if (preCondition(pv_power, load_power)) {
-        updatePredictBank(status);
-        pthread_mutex_unlock(&status_mutex);
-        return 0;
-    }
-
-    if(compare_power) {
+    preCondition(pv_power, load_power);
+    printf("INFO: PV power=%f | Load power=%f\n", pv_power, load_power);
+    if(load_power > pv_power) {
         printf("INFO: Start discharging process\n");
         write_gpio(MR_OUT_EN_GPIO, 1);
         open_all_input_switch();
@@ -947,9 +914,7 @@ int process_algorithm(StatusStruct **status) {
     }
     else {
         printf("INFO: Start charging process.\n");
-        float i_pv_remain = getIPvRemain(status);
-        printf("INFO: Ramain PV current: %.2f\n", i_pv_remain);
-        int bank_to_chrg = batteryChargingSelect(i_pv_remain, status);
+        int bank_to_chrg = batteryChargingSelect(status);
         write_gpio(MR_IN_EN_GPIO, 1);
         write_gpio(MR_OUT_EN_GPIO, 1);
         BatteryStruct *batt = NULL;

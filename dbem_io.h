@@ -112,6 +112,10 @@
 #define CHRG_CYCLY_3_STAGE 1
 #define CHRG_CYCLE_2_STAGE 2
 
+extern int compareSOC(StatusStruct** status);
+extern int compareCapacityWithSOC(int comp_soc, int *batt_cap_idx_sorted, int *batt_soc_idx_sorted);
+extern int compareBattCurrentChg(int batt_num, ConfigStruct *config, StatusStruct **status);
+
 /* Write GPIO pin
   Parameters:
   - pin: GPIO pin number to control
@@ -263,7 +267,7 @@ extern int getBankLowestVoltage(StatusStruct **status);
   Return:
   - in-range bank number
 */
-extern int batteryChargingSelect(float i_pv_remain, StatusStruct **status);
+extern int batteryChargingSelect(StatusStruct **status);
 extern int batteryDischargingSelect(StatusStruct **status);
 extern int getBankToCharge(float i_pv_remain, StatusStruct **status);
 

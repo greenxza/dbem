@@ -6,7 +6,7 @@
 #define WRITE_MODBUS_DELAY_USEC 1000000 // Micro seconds
 #define COMBOX_MPPT_SLAVE_ADDR 0xAA // Charger
 #define COMBOX_XW_SLAVE_ADDR 0xA // Inverter
-#define SOC_COMP_CAP 0.1   /**< compare value of SOC with capacity >*/
+#define SOC_COMP_CAP 0.01   /**< compare value of SOC with capacity >*/
 
 modbus_t *connectModbus();
 
@@ -624,7 +624,7 @@ float getBattDisChrgCurrent(int bank_num, float a, float b){
 
   if(adc_volt_read <= READ_ADC_ERROR_VALUE){
     return -999999; //return -999999 when read adc error
-  }else{
+  } else {
     float volt_out_read =adcToVoltRef(adc_volt_read);
     float volt_ref_read =adcToVoltRef(adc_volt_ref);
     float current = voltToCurrent(volt_out_read, volt_ref_read, a, b);
@@ -739,37 +739,10 @@ int updateFaultStatus(StatusStruct **status){
     (*status)->b3->in_en = 0;
     (*status)->b3->out_en = 0;
   }
-
- /* if(fault_ovp) {
-    //Cut all inlet path
-    write_gpio(MR_IN_EN_GPIO, 0);
-
-    //Disable all UI inlet path
-    (*status)->b1->in_en = 0;
-    (*status)->b2->in_en = 0;
-    (*status)->b3->in_en = 0;
-  } */
-
-  /* if(fault_uvp) {
-    //Cut all outlet path
-    write_gpio(MR_OUT_EN_GPIO, 0);
-
-    //Disable all UI outlet path
-    (*status)->b1->out_en = 0;
-    (*status)->b2->out_en = 0;
-    (*status)->b3->out_en = 0;
-  } */
-
-  // int fault_ovp = fault_ovp_high || fault_ovp_low;
-
   int fault_modbus_connection = 0;
   if((*status)->modbus_err!=0) {
     fault_modbus_connection = 1;
   }
-  // if(((*status)->p_pv==-1) && ((*status)->p_load==-1)){
-  //   fault_modbus_connection = 1;
-  // }
-
   //Update database for fault status.
   update_fault(fault_ocp ,fault_otp, fault_ovp, fault_uvp, fault_modbus_connection);
 
@@ -1109,7 +1082,7 @@ int compareSOC(StatusStruct** status) {
  * \return
  *
  */
-int compareCapacityWithSOC(int comp_soc, int batt_cap_idx_sorted, int batt_soc_idx_sorted) {
+int compareCapacityWithSOC(int comp_soc, int *batt_cap_idx_sorted, int *batt_soc_idx_sorted) {
     printf("INFO: get SOC and compare capacity\n");
     if (comp_soc == 0b0111) {
         printf("INFO: All batteries have equally SOC\n");
@@ -1132,11 +1105,11 @@ int compareCapacityWithSOC(int comp_soc, int batt_cap_idx_sorted, int batt_soc_i
                 return batt_cap_idx_sorted[1];
             }
         }
-    }
-    binary[3] = { 0b0110, 0b0011, 0b0101 };
-    temp[3] = { 2, 3, 1 };
+    };
+    int binary2[3] = { 0b0110, 0b0011, 0b0101 };
+    int temp2[3] = { 2, 3, 1 };
     for (idx = 0; idx < 2; idx++) {
-        if (comp_soc == binary[idx] & batt_cap_idx_sorted[0] == temp[idx]) {
+        if (comp_soc == binary2[idx] & batt_cap_idx_sorted[0] == temp2[idx]) {
             return batt_cap_idx_sorted[0];
         }
     }
@@ -1150,21 +1123,64 @@ int compareCapacityWithSOC(int comp_soc, int batt_cap_idx_sorted, int batt_soc_i
  * \return
  *
  */
-int compareBattCurrentChg(int batt_to_change, int batt_soc_idx_sorted, float i_batt, float i_min, float i_max) {
-    print("INFO: Check if battery current is within limit.\n");
+int compareBattCurrentChg(int batt_num, ConfigStruct *config, StatusStruct **status) {
+    printf("INFO: Check if battery current is within limit.\n");
+    
+    BatteryConfigStruct *batt_config = NULL;
+    float i_batt;
+    float i_min;
+    float i_max;
+    switch(batt_num) {
+        case 1:
+            batt_config = config->b1;
+            i_batt = (*status)->b1->comb_i_in;
+            i_min = config->b1->chg_i_min;
+            i_max = config->b1->chg_i_max;
+            break;
+        case 2:
+            batt_config = config->b2;
+            i_batt = (*status)->b2->comb_i_in;
+            i_min = config->b2->chg_i_min;
+            i_max = config->b2->chg_i_max;
+            break;
+        case 3:
+            batt_config = config->b3;
+            i_batt = (*status)->b3->comb_i_in;
+            i_min = config->b3->chg_i_min;
+            i_max = config->b3->chg_i_max;
+            break;
+        default:
+            break;
+    }
+    printf("INFO: Ramain PV current: %.2f\n", i_batt);
+    if (batt_config == NULL) {
+      return 1;
+    }
+    printf("INFO: B%d | I_BATT=%.2f | I_MIN=%.2f | I_MAX=%.2f\n", i_batt, i_min, i_max);
     if (i_min <= i_batt && i_batt <= i_max) {
         printf("INFO: Battery current is within range.\n");
-        return batt_to_change;
+        return 0;
     } else {
         printf("INFO: Battery current is out of range on selected battery.\n");
-        if (batt_to_change == batt_soc_idx_sorted[2]) {
-            return batt_soc_idx_sorted[1];
-        }
-        else if (batt_to_change == batt_soc_idx_sorted[1]) {
-            return batt_soc_idx_sorted[0];
+        return 1;
+    }
+}
+
+/** \brief
+ *
+ * \param
+ * \param
+ * \return
+ *
+ */
+int getNextHigherSOC(int batt_to_chg, int *batt_soc_idx_sorted) {
+    printf("INFO: Get next higher SOC\n");
+    int idx;
+    for (idx = 2; idx > 0; idx--) {
+        if (batt_to_chg == batt_soc_idx_sorted[idx]) {
+          return batt_soc_idx_sorted[idx - 1];
         }
     }
-    printf("INFO: Battery current is out of range. Shutdown.\n");
     return 0;
 }
 
@@ -1175,43 +1191,33 @@ int compareBattCurrentChg(int batt_to_change, int batt_soc_idx_sorted, float i_b
  * \return get battery group index
  *
  */
-int batteryChargingSelect(float i_pv_remain, StatusStruct **status) {
+int batteryChargingSelect(StatusStruct **status) {
     printf("INFO: Select battery to charge\n");
     int batt_to_chg = 0;
     int soc_idx[3] = {1, 2, 3};
     float soc[3] = {(*status)->b1->soc, (*status)->b2->soc, (*status)->b3->soc};
-    BatteryConfigStruct *battery_config1;
-    BatteryConfigStruct *battery_config2;
-    BatteryConfigStruct *battery_config3;
-    battery_config1 = malloc(sizeof(BatteryConfigStruct));
-    battery_config2 = malloc(sizeof(BatteryConfigStruct));
-    battery_config3 = malloc(sizeof(BatteryConfigStruct));
-    retrieve_config(&battery_config1, 1);
-    retrieve_config(&battery_config2, 2);
-    retrieve_config(&battery_config3, 3);
+    ConfigStruct *config;
+    config = malloc(sizeof(ConfigStruct));
+    config->b1 = malloc(sizeof(BatteryConfigStruct));
+    config->b2 = malloc(sizeof(BatteryConfigStruct));
+    config->b3 = malloc(sizeof(BatteryConfigStruct));
+    retrieve_config(&(config->b1), 1);
+    retrieve_config(&(config->b2), 2);
+    retrieve_config(&(config->b3), 3);
     int batt_cap_idx[3] = {1, 2, 3};
     float batt_cap_value[3] = {
-        battery_config1->capacity, battery_config2->capacity, battery_config3->capacity};
-    float i_min[3] = {
-        battery_config1->chg_i_min, battery_config2->chg_i_min, battery_config3->chg_i_min};
-    float i_max[3] = {
-        battery_config1->chg_i_min, battery_config2->chg_i_max, battery_config3->chg_i_max};
+        config->b1->capacity, config->b2->capacity, config->b3->capacity};
     int comp_soc = compareSOC(status);
     sortBiggestToSmallest(batt_cap_idx, batt_cap_value);
     sortBiggestToSmallest(soc_idx, soc);
     batt_to_chg = compareCapacityWithSOC(comp_soc, batt_cap_idx, soc_idx);
-    int prv_batt_to_chg = batt_to_chg;
-    while (batt_to_chg != 0) {
-        batt_to_chg = compareBattCurrentChg(batt_to_chg, soc, i_pv_remain, i_min[batt_to_chg - 1], i_max[batt_to_chg - 1]);
-        if (prv_batt_to_chg == batt_to_chg) {
-            break;
-        } else {
-            prv_batt_to_chg = batt_to_chg
-        }
+    if (compareBattCurrentChg(batt_to_chg, config, status)) {
+        batt_to_chg = getNextHigherSOC(batt_to_chg, soc_idx);
     }
-    free(battery_config1);
-    free(battery_config2);
-    free(battery_config3);
+    free(config->b1);
+    free(config->b2);
+    free(config->b3);
+    free(config);
     return batt_to_chg;
 }
 
